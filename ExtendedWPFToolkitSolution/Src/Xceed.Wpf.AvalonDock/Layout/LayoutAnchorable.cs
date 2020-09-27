@@ -1,14 +1,15 @@
 ﻿/*************************************************************************************
+   
+   Toolkit for WPF
 
-   Extended WPF Toolkit
+   Copyright (C) 2007-2020 Xceed Software Inc.
 
-   Copyright (C) 2007-2013 Xceed Software Inc.
-
-   This program is provided to you under the terms of the Microsoft Public
-   License (Ms-PL) as published at http://wpftoolkit.codeplex.com/license 
+   This program is provided to you under the terms of the XCEED SOFTWARE, INC.
+   COMMUNITY LICENSE AGREEMENT (for non-commercial use) as published at 
+   https://github.com/xceedsoftware/wpftoolkit/blob/master/license.md 
 
    For more features, controls, and fast professional support,
-   pick up the Plus Edition at http://xceed.com/wpf_toolkit
+   pick up the Plus Edition at https://xceed.com/xceed-toolkit-plus-for-wpf/
 
    Stay informed: follow @datagrid on Twitter or Like http://facebook.com/datagrids
 
@@ -260,6 +261,7 @@ namespace Xceed.Wpf.AvalonDock.Layout
 
     public event EventHandler IsVisibleChanged;
     public event EventHandler<CancelEventArgs> Hiding;
+    public event EventHandler Hidden;
 
     #endregion
 
@@ -417,12 +419,20 @@ namespace Xceed.Wpf.AvalonDock.Layout
       {
         var parentAsGroup = Parent as ILayoutGroup;
         PreviousContainer = parentAsGroup;
-        PreviousContainerIndex = parentAsGroup.IndexOfChild( this );
+        if( parentAsGroup != null )
+        {
+          PreviousContainerIndex = parentAsGroup.IndexOfChild( this );
+        }
       }
-      Root.Hidden.Add( this );
+      if( this.Root != null )
+      {
+        this.Root.Hidden.Add( this );
+      }
       RaisePropertyChanged( "IsVisible" );
       RaisePropertyChanged( "IsHidden" );
       NotifyIsVisibleChanged();
+
+      OnHidden();
     }
 
 
@@ -562,6 +572,7 @@ namespace Xceed.Wpf.AvalonDock.Layout
         var parentGroup = Parent as LayoutAnchorGroup;
         var parentSide = parentGroup.Parent as LayoutAnchorSide;
         var previousContainer = ( ( ILayoutPreviousContainer )parentGroup ).PreviousContainer as LayoutAnchorablePane;
+        var root = parentGroup.Root as LayoutRoot;
 
         if( previousContainer == null )
         {
@@ -579,7 +590,6 @@ namespace Xceed.Wpf.AvalonDock.Layout
               {
                 previousContainer = new LayoutAnchorablePane();
                 LayoutPanel panel = new LayoutPanel() { Orientation = Orientation.Horizontal };
-                LayoutRoot root = parentGroup.Root as LayoutRoot;
                 LayoutPanel oldRootPanel = parentGroup.Root.RootPanel as LayoutPanel;
                 root.RootPanel = panel;
                 panel.Children.Add( oldRootPanel );
@@ -597,7 +607,6 @@ namespace Xceed.Wpf.AvalonDock.Layout
               {
                 previousContainer = new LayoutAnchorablePane();
                 LayoutPanel panel = new LayoutPanel() { Orientation = Orientation.Horizontal };
-                LayoutRoot root = parentGroup.Root as LayoutRoot;
                 LayoutPanel oldRootPanel = parentGroup.Root.RootPanel as LayoutPanel;
                 root.RootPanel = panel;
                 panel.Children.Add( previousContainer );
@@ -615,7 +624,6 @@ namespace Xceed.Wpf.AvalonDock.Layout
               {
                 previousContainer = new LayoutAnchorablePane();
                 LayoutPanel panel = new LayoutPanel() { Orientation = Orientation.Vertical };
-                LayoutRoot root = parentGroup.Root as LayoutRoot;
                 LayoutPanel oldRootPanel = parentGroup.Root.RootPanel as LayoutPanel;
                 root.RootPanel = panel;
                 panel.Children.Add( previousContainer );
@@ -633,7 +641,6 @@ namespace Xceed.Wpf.AvalonDock.Layout
               {
                 previousContainer = new LayoutAnchorablePane();
                 LayoutPanel panel = new LayoutPanel() { Orientation = Orientation.Vertical };
-                LayoutRoot root = parentGroup.Root as LayoutRoot;
                 LayoutPanel oldRootPanel = parentGroup.Root.RootPanel as LayoutPanel;
                 root.RootPanel = panel;
                 panel.Children.Add( oldRootPanel );
@@ -642,20 +649,23 @@ namespace Xceed.Wpf.AvalonDock.Layout
               break;
           }
         }
-        else
+
+        //I'm about to remove parentGroup, redirect any content (ie hidden contents) that point to it
+        //to previousContainer
+        foreach( var cnt in root.Descendents().OfType<ILayoutPreviousContainer>().Where( c => c.PreviousContainer == parentGroup ) )
         {
-          //I'm about to remove parentGroup, redirect any content (ie hidden contents) that point to it
-          //to previousContainer
-          LayoutRoot root = parentGroup.Root as LayoutRoot;
-          foreach( var cnt in root.Descendents().OfType<ILayoutPreviousContainer>().Where( c => c.PreviousContainer == parentGroup ) )
-          {
-            cnt.PreviousContainer = previousContainer;
-          }
+          cnt.PreviousContainer = previousContainer;
         }
 
         foreach( var anchorableToToggle in parentGroup.Children.ToArray() )
         {
           previousContainer.Children.Add( anchorableToToggle );
+        }
+
+        if( previousContainer.Children.Count > 0 )
+        {
+          // Select the LayoutContent where the Toggle pin button was pressed.
+          previousContainer.SelectedContentIndex = previousContainer.Children.IndexOf( this );
         }
 
         parentSide.Children.Remove( parentGroup );
@@ -727,6 +737,12 @@ namespace Xceed.Wpf.AvalonDock.Layout
     {
       if( Hiding != null )
         Hiding( this, args );
+    }
+
+    protected virtual void OnHidden()
+    {
+      if( Hidden != null )
+        Hidden( this, EventArgs.Empty );
     }
 
     internal void CloseAnchorable()
